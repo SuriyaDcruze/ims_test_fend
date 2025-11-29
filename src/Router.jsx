@@ -23,6 +23,7 @@ import AdminQuery from "./dashboard/admin/AdminQuery";``
 import AdminForumPage from "./dashboard/admin/AdminForumPage";
 import AdminProfile from "./dashboard/admin/AdminProfile";
 import AdminExam from "./dashboard/admin/AdminExam";
+import CandidateDetailPage from "./dashboard/admin/CandidateDetailPage";
 // Student
 import StudentLayout from "./dashboard/student/StudentLayout";
 import StudentDashboard from "./dashboard/student/StudentDashboard";
@@ -126,6 +127,10 @@ export const Router = createBrowserRouter([
       {
         path: "progress",
         element: <AdminProgress />,
+      },
+      {
+        path: "progress/candidate/:userId",
+        element: <CandidateDetailPage />,
       },
       {
         path: "query",

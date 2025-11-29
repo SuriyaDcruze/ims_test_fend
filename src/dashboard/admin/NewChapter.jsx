@@ -4,14 +4,14 @@ import { findFileType } from "../../hook/CourseFunction";
 import { UploadFileWithType } from "../../service/api";
 import AddTest from "./AddTest";
 
-const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
+const NewChapter = ({ addChapter, cancel, editData, removeThisChapter }) => {
   const [openTest, setOpenTest] = useState({ open: false, data: null });
   const [errors, setErrors] = useState({});
   const [uploadingFile, setUploadingFile] = useState(false);
   const [selectedTopicIndex, setSelectedTopicIndex] = useState(null);
-  const [selectedSubTopicIndex, setSelectedSubTopicIndex] = useState(null);
+  const [selectedLessonIndex, setSelectedLessonIndex] = useState(null);
 
-  const [currentSubject, setCurrentSubject] = useState({
+  const [currentChapter, setCurrentChapter] = useState({
     title: "",
     topics: [],
     updateIndex: null,
@@ -19,46 +19,46 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
 
   const [currentTopic, setCurrentTopic] = useState({
     title: "",
-    subTopics: [],
+    lessons: [],
     updateIndex: null,
   });
 
-  const [currentSubTopic, setCurrentSubTopic] = useState({
+  const [currentLesson, setCurrentLesson] = useState({
     title: "",
     updateIndex: null,
     test: null,
     file: null,
   });
 
-  const [subTopicFile, setSubTopicFile] = useState(null);
+  const [lessonFile, setLessonFile] = useState(null);
 
   useEffect(() => {
     if (editData) {
       const sanitizedTopics = editData.topics.map((topic) => ({
         ...topic,
-        subTopics: topic.subTopics.map((subTopic) => ({
-          ...subTopic,
-          file: subTopic.file || null,
-        })),
+        lessons: topic.lessons?.map((lesson) => ({
+          ...lesson,
+          file: lesson.file || null,
+        })) || [],
       }));
-      setCurrentSubject({ ...editData, topics: sanitizedTopics });
+      setCurrentChapter({ ...editData, topics: sanitizedTopics });
     }
   }, [editData]);
 
   const handleAddFile = (file) => {
     if (!file) return;
     const filetype = findFileType(file);
-    setSubTopicFile(file);
-    setCurrentSubTopic({
-      ...currentSubTopic,
+    setLessonFile(file);
+    setCurrentLesson({
+      ...currentLesson,
       file: { url: "", type: filetype },
       test: null,
     });
     setErrors((prev) => ({ ...prev, file: null }));
   };
 
-  const handleSubTopicInput = (type, value) => {
-    setCurrentSubTopic({ ...currentSubTopic, [type]: value });
+  const handleLessonInput = (type, value) => {
+    setCurrentLesson({ ...currentLesson, [type]: value });
     setErrors((prev) => ({ ...prev, [type]: null }));
   };
 
@@ -74,16 +74,16 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
     }
   };
 
-  const addSubTopic = async () => {
+  const addLesson = async () => {
     try {
       setUploadingFile(true);
       setErrors({});
 
-      if (!currentSubTopic.title) {
+      if (!currentLesson.title) {
         setErrors((prev) => ({ ...prev, title: "Title is required" }));
         return;
       }
-      if (!subTopicFile && !currentSubTopic.file?.url && !currentSubTopic.test) {
+      if (!lessonFile && !currentLesson.file?.url && !currentLesson.test) {
         setErrors((prev) => ({
           ...prev,
           file: "Either a file or a test is required",
@@ -91,38 +91,38 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
         return;
       }
 
-      const newSubTopics = [...currentTopic.subTopics];
-      let subTopicData = { ...currentSubTopic };
+      const newLessons = [...currentTopic.lessons];
+      let lessonData = { ...currentLesson };
 
-      if (subTopicFile) {
-        const link = await uploadFile(subTopicFile);
-        subTopicData = {
-          ...subTopicData,
+      if (lessonFile) {
+        const link = await uploadFile(lessonFile);
+        lessonData = {
+          ...lessonData,
           file: {
             url: link.fileUrl,
             type: link.fileType,
           },
           test: null,
         };
-      } else if (!subTopicData.file?.url && !subTopicData.test) {
-        subTopicData.file = null;
+      } else if (!lessonData.file?.url && !lessonData.test) {
+        lessonData.file = null;
       }
 
-      if (currentSubTopic.updateIndex === null) {
-        newSubTopics.push(subTopicData);
+      if (currentLesson.updateIndex === null) {
+        newLessons.push(lessonData);
       } else {
-        newSubTopics[currentSubTopic.updateIndex] = subTopicData;
+        newLessons[currentLesson.updateIndex] = lessonData;
       }
 
-      setCurrentTopic({ ...currentTopic, subTopics: newSubTopics });
-      setSubTopicFile(null);
-      setCurrentSubTopic({
+      setCurrentTopic({ ...currentTopic, lessons: newLessons });
+      setLessonFile(null);
+      setCurrentLesson({
         title: "",
         updateIndex: null,
         file: null,
         test: null,
       });
-      setSelectedSubTopicIndex(null);
+      setSelectedLessonIndex(null);
     } catch (error) {
       setErrors((prev) => ({ ...prev, file: error.message }));
     } finally {
@@ -136,49 +136,49 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
       setErrors((prev) => ({ ...prev, topicTitle: "Topic title is required" }));
       return;
     }
-    if (currentTopic.subTopics.length === 0) {
+    if (currentTopic.lessons.length === 0) {
       setErrors((prev) => ({
         ...prev,
-        subTopics: "At least one subTopic is required",
+        lessons: "At least one lesson is required for a topic",
       }));
       return;
     }
 
-    const newTopics = [...currentSubject.topics];
+    const newTopics = [...currentChapter.topics];
     if (currentTopic.updateIndex === null) {
       newTopics.push({ ...currentTopic, updateIndex: newTopics.length });
     } else {
       newTopics[currentTopic.updateIndex] = { ...currentTopic, updateIndex: currentTopic.updateIndex };
     }
-    setCurrentSubject({ ...currentSubject, topics: newTopics });
+    setCurrentChapter({ ...currentChapter, topics: newTopics });
     setCurrentTopic({
       title: "",
-      subTopics: [],
+      lessons: [],
       updateIndex: null,
     });
     setSelectedTopicIndex(null);
   };
 
-  const validateAndUpdateSubject = () => {
+  const validateAndUpdateChapter = () => {
     setErrors({});
-    if (!currentSubject.title.trim()) {
-      setErrors((prev) => ({ ...prev, subjectTitle: "Main topic title is required" }));
+    if (!currentChapter.title.trim()) {
+      setErrors((prev) => ({ ...prev, chapterTitle: "Chapter title is required" }));
       return;
     }
-    if (currentSubject.topics.length === 0) {
+    if (currentChapter.topics.length === 0) {
       setErrors((prev) => ({
         ...prev,
         topics: "At least one topic is required",
       }));
       return;
     }
-    addSubject(currentSubject);
+    addChapter(currentChapter);
   };
 
-  const setEditSubTopic = (subTopic, index) => {
-    setCurrentSubTopic({ ...subTopic, updateIndex: index });
-    setSubTopicFile(null);
-    setSelectedSubTopicIndex(index);
+  const setEditLesson = (lesson, index) => {
+    setCurrentLesson({ ...lesson, updateIndex: index });
+    setLessonFile(null);
+    setSelectedLessonIndex(index);
   };
 
   const setEditTopic = (topic, index) => {
@@ -186,28 +186,28 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
     setSelectedTopicIndex(index);
   };
 
-  const handleRemoveSubTopic = (index) => {
-    const newSubTopics = [...currentTopic.subTopics];
-    newSubTopics.splice(index, 1);
-    setCurrentTopic({ ...currentTopic, subTopics: newSubTopics });
+  const handleRemoveLesson = (index) => {
+    const newLessons = [...currentTopic.lessons];
+    newLessons.splice(index, 1);
+    setCurrentTopic({ ...currentTopic, lessons: newLessons });
   };
 
   const handleRemoveTopic = (index) => {
-    const newTopics = [...currentSubject.topics];
+    const newTopics = [...currentChapter.topics];
     newTopics.splice(index, 1);
     const updatedTopics = newTopics.map((topic, idx) => ({
       ...topic,
       updateIndex: idx,
     }));
-    setCurrentSubject({ ...currentSubject, topics: updatedTopics });
+    setCurrentChapter({ ...currentChapter, topics: updatedTopics });
   };
 
   const handleDelete = () => {
     const confirm = window.confirm(
-      "Confirm to delete this main topic? All topics and chapters will be deleted."
+      "Confirm to delete this chapter? All topics and lessons will be deleted."
     );
     if (confirm && editData) {
-      removeThisSubject(editData);
+      removeThisChapter(editData);
       cancel();
     }
   };
@@ -217,10 +217,10 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
       <div className="bg-white max-w-5xl w-full rounded-lg shadow-lg p-6 flex flex-col overflow-y-auto max-h-screen">
         {openTest.open && (
           <AddTest
-            testId={currentSubTopic?.test}
+            testId={currentLesson?.test}
             addTest={(data) =>
-              setCurrentSubTopic({
-                ...currentSubTopic,
+              setCurrentLesson({
+                ...currentLesson,
                 test: data,
                 file: null,
               })
@@ -241,54 +241,54 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
                 onClick={handleDelete}
               >
                 <Trash className="w-5 h-5" />
-                Delete Main Topic
+                Delete Chapter
               </button>
             )}
             <button
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
-              onClick={validateAndUpdateSubject}
+              onClick={validateAndUpdateChapter}
             >
-              {editData?.updateIndex != null ? "Update Main Topic" : "Add to Course"}
+              {editData?.updateIndex != null ? "Update Chapter" : "Add to Course"}
             </button>
           </div>
         </div>
 
-        {/* Main Topic Title Section */}
+        {/* Chapter Title Section */}
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-2">
             <BookOpen className="w-5 h-5 text-green-600" />
-            <h3 className="text-xl font-bold">Create New Main Topic</h3>
+            <h3 className="text-xl font-bold">Create New Chapter</h3>
           </div>
           <div>
-            <label htmlFor="subject-title" className="mb-1 block text-sm font-medium">
-              Main Topic Title <span className="text-red-500">*</span>
+            <label htmlFor="chapter-title" className="mb-1 block text-sm font-medium">
+              Chapter Title <span className="text-red-500">*</span>
             </label>
             <input
-              id="subject-title"
+              id="chapter-title"
               type="text"
               className={`w-full border rounded px-4 py-2 focus:ring-2 focus:ring-green-500 ${
-                errors.subjectTitle ? "border-red-500" : "border-gray-300"
+                errors.chapterTitle ? "border-red-500" : "border-gray-300"
               }`}
-              value={currentSubject.title || ""}
+              value={currentChapter.title || ""}
               onChange={(e) => {
-                setCurrentSubject({ ...currentSubject, title: e.target.value });
-                setErrors((prev) => ({ ...prev, subjectTitle: null }));
+                setCurrentChapter({ ...currentChapter, title: e.target.value });
+                setErrors((prev) => ({ ...prev, chapterTitle: null }));
               }}
-              placeholder="Enter subject title"
+              placeholder="Enter chapter title"
             />
-            {errors.subjectTitle && (
-              <p className="text-red-500 text-sm mt-1">{errors.subjectTitle}</p>
+            {errors.chapterTitle && (
+              <p className="text-red-500 text-sm mt-1">{errors.chapterTitle}</p>
             )}
           </div>
         </div>
 
-        {/* Topic Section */}
+        {/* Topics Section */}
         <div className="mb-6 border-t pt-4">
           <div className="flex justify-between items-center mb-4">
             <h4 className="text-lg font-semibold">Topics</h4>
             <button
               onClick={() => {
-                setCurrentTopic({ title: "", subTopics: [], updateIndex: null });
+                setCurrentTopic({ title: "", lessons: [], updateIndex: null });
                 setSelectedTopicIndex(null);
               }}
               className="flex items-center gap-2 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -322,47 +322,47 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
               )}
             </div>
 
-            {/* Chapter Input */}
+            {/* Lesson Input */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
-                <label htmlFor="subtopic-title" className="mb-1 block text-sm font-medium">
-                  Chapter Title
+                <label htmlFor="lesson-title" className="mb-1 block text-sm font-medium">
+                  Lesson Title
                 </label>
                 <input
-                  id="subtopic-title"
+                  id="lesson-title"
                   type="text"
                   className={`w-full border rounded px-4 py-2 focus:ring-2 focus:ring-green-500 ${
                     errors.title ? "border-red-500" : "border-gray-300"
                   }`}
-                  value={currentSubTopic.title}
-                  onChange={(e) => handleSubTopicInput("title", e.target.value)}
-                  placeholder="Enter chapter title"
+                  value={currentLesson.title}
+                  onChange={(e) => handleLessonInput("title", e.target.value)}
+                  placeholder="Enter lesson title"
                 />
                 {errors.title && (
                   <p className="text-red-500 text-sm mt-1">{errors.title}</p>
                 )}
               </div>
               <div className="md:col-span-2">
-                <label htmlFor="subtopic-file" className="mb-1 block text-sm font-medium">
+                <label htmlFor="lesson-file" className="mb-1 block text-sm font-medium">
                   Upload Media
                 </label>
                 <div
                   className={`relative w-full border border-dashed border-gray-400 p-3 rounded bg-gray-50 ${
-                    currentSubTopic.test ? "opacity-50 cursor-not-allowed" : ""
+                    currentLesson.test ? "opacity-50 cursor-not-allowed" : ""
                   }`}
                 >
                   <p className="text-sm text-gray-600 truncate">
-                    {subTopicFile?.name ||
-                      currentSubTopic.file?.url ||
+                    {lessonFile?.name ||
+                      currentLesson.file?.url ||
                       "Upload video, audio, PDF, or PowerPoint"}
                   </p>
                   <input
-                    id="subtopic-file"
+                    id="lesson-file"
                     type="file"
                     className="absolute inset-0 opacity-0 cursor-pointer"
                     accept="video/*,audio/*,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                     onChange={(e) => handleAddFile(e.target.files[0])}
-                    disabled={uploadingFile || currentSubTopic.test}
+                    disabled={uploadingFile || currentLesson.test}
                   />
                   {uploadingFile && (
                     <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-75 rounded">
@@ -396,28 +396,28 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
               <div className="md:col-span-2">
                 <button
                   className={`mt-3 flex items-center gap-2 bg-gray-100 p-3 rounded w-full text-left ${
-                    (subTopicFile || currentSubTopic.file?.url)
+                    (lessonFile || currentLesson.file?.url)
                       ? "opacity-50 cursor-not-allowed"
                       : "hover:bg-gray-200"
                   }`}
                   onClick={() =>
-                    !(subTopicFile || currentSubTopic.file?.url) &&
-                    setOpenTest({ open: true, data: currentSubTopic.test })
+                    !(lessonFile || currentLesson.file?.url) &&
+                    setOpenTest({ open: true, data: currentLesson.test })
                   }
-                  disabled={subTopicFile || currentSubTopic.file?.url}
+                  disabled={lessonFile || currentLesson.file?.url}
                 >
                   <Clipboard className="w-5 h-5 text-gray-600" />
                   <p className="text-sm text-gray-700">
-                    {currentSubTopic.test
+                    {currentLesson.test
                       ? "Test - click to update"
-                      : "Add a test for this chapter"}
+                      : "Add a test for this lesson"}
                   </p>
                 </button>
               </div>
               <div className="md:col-span-2">
                 <button
                   className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                  onClick={addSubTopic}
+                  onClick={addLesson}
                   disabled={uploadingFile}
                 >
                   {uploadingFile ? (
@@ -445,42 +445,42 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
                       Uploading...
                     </>
                   ) : (
-                    "Add Chapter"
+                    "Add Lesson"
                   )}
                 </button>
               </div>
             </div>
 
-            {/* Chapters List */}
-            {currentTopic.subTopics.length > 0 && (
+            {/* Lessons List */}
+            {currentTopic.lessons.length > 0 && (
               <div className="mt-4">
-                <h5 className="text-sm font-semibold mb-2">Chapters:</h5>
-                {currentTopic.subTopics.map((subTopic, index) => (
+                <h5 className="text-sm font-semibold mb-2">Lessons:</h5>
+                {currentTopic.lessons.map((lesson, index) => (
                   <div
                     key={index}
                     className={`border rounded p-3 mb-2 ${
-                      currentSubTopic.updateIndex === index ? "bg-gray-100" : "bg-white"
+                      currentLesson.updateIndex === index ? "bg-gray-100" : "bg-white"
                     }`}
                   >
                     <div className="flex justify-between items-center">
                       <div>
-                        <p className="text-sm font-medium">{subTopic.title}</p>
-                        {subTopic.file?.url && (
-                          <p className="text-xs text-gray-500">File: {subTopic.file.type}</p>
+                        <p className="text-sm font-medium">{lesson.title}</p>
+                        {lesson.file?.url && (
+                          <p className="text-xs text-gray-500">File: {lesson.file.type}</p>
                         )}
-                        {subTopic.test && (
+                        {lesson.test && (
                           <p className="text-xs text-blue-500">Test Added</p>
                         )}
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleRemoveSubTopic(index)}
+                          onClick={() => handleRemoveLesson(index)}
                           className="p-1 text-red-600 hover:text-red-800"
                         >
                           <Trash className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => setEditSubTopic(subTopic, index)}
+                          onClick={() => setEditLesson(lesson, index)}
                           className="p-1 text-blue-600 hover:text-blue-800"
                         >
                           <Edit className="w-4 h-4" />
@@ -496,7 +496,7 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
             <button
               className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
               onClick={addTopic}
-              disabled={!currentTopic.title || currentTopic.subTopics.length === 0}
+              disabled={!currentTopic.title || currentTopic.lessons.length === 0}
             >
               {currentTopic.updateIndex !== null ? "Update Topic" : "Add Topic"}
             </button>
@@ -506,9 +506,12 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
           {errors.topics && (
             <p className="text-red-500 text-sm mb-2">{errors.topics}</p>
           )}
-          {currentSubject.topics.length > 0 && (
+          {errors.lessons && (
+            <p className="text-red-500 text-sm mb-2">{errors.lessons}</p>
+          )}
+          {currentChapter.topics.length > 0 && (
             <div className="mt-4 space-y-2">
-              {currentSubject.topics.map((topic, index) => (
+              {currentChapter.topics.map((topic, index) => (
                 <div
                   key={index}
                   className={`border rounded p-4 ${
@@ -533,7 +536,7 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
                     </div>
                   </div>
                   <div className="text-sm text-gray-600">
-                    {topic.subTopics.length} Chapter(s)
+                    {topic.lessons?.length || 0} Lesson(s)
                   </div>
                 </div>
               ))}
@@ -545,8 +548,4 @@ const NewSubject = ({ addSubject, cancel, editData, removeThisSubject }) => {
   );
 };
 
-export default NewSubject;
-
-
-
-
+export default NewChapter;

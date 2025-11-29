@@ -3,7 +3,8 @@ import axios from "axios";
 import { useNavigate, useParams } from "react-router";
 import { Edit, Trash } from "lucide-react";
 import NewLesson from "./NewLesson";
-import NewSubject from "./NewSubject";
+import NewTopic from "./NewTopic";
+import NewChapter from "./NewChapter";
 import NoLesson from "../../assets/no-lesson-illustration.svg";
 import { convertToCourseFormData } from "../../hook/CourseFunction";
 import { AddNewCourseApi, GetCourseById, UploadFile } from "../../service/api";
@@ -96,6 +97,8 @@ const AddNewCourse = () => {
     thumbnail: null,
     overviewPoints: [],
     lessons: [],
+    chapters: [],
+    topics: [],
     subjects: [],
     whatYouGet: [],
     whoIsThisFor: [],
@@ -118,13 +121,19 @@ const AddNewCourse = () => {
           price: response.data.price || "",
           thumbnail: response.data.thumbnail || null,
           lessons: response.data.lessons || [],
+          chapters: response.data.chapters || [],
+          topics: response.data.topics || [],
           subjects: response.data.subjects || [],
           whatYouGet: response.data.whatYouGet || [],
           whoIsThisFor: response.data.whoIsThisFor || [],
           overviewPoints: response.data.overviewPoints || [],
         });
         // Determine which structure to use based on data
-        if (response.data.subjects && response.data.subjects.length > 0) {
+        if (response.data.chapters && response.data.chapters.length > 0) {
+          setUseHierarchicalStructure(true);
+        } else if (response.data.topics && response.data.topics.length > 0) {
+          setUseHierarchicalStructure(true);
+        } else if (response.data.subjects && response.data.subjects.length > 0) {
           setUseHierarchicalStructure(true);
         } else if (response.data.lessons && response.data.lessons.length > 0) {
           setUseHierarchicalStructure(false);
@@ -149,8 +158,8 @@ const AddNewCourse = () => {
     if (isNaN(numericPrice) || numericPrice <= 0)
       return "Valid price is required";
     if (useHierarchicalStructure) {
-      if (courseData.subjects.length === 0)
-        return "At least one subject is required";
+      if (courseData.chapters.length === 0 && courseData.topics.length === 0 && courseData.subjects.length === 0)
+        return "At least one chapter is required";
     } else {
       if (courseData.lessons.length === 0)
         return "At least one lesson is required";
@@ -229,6 +238,45 @@ const AddNewCourse = () => {
     setPopupOpen({ open: false, data: null });
   };
 
+  const addChapterToCourse = (chapter) => {
+    const newChapters = [...courseData.chapters];
+    if (chapter.updateIndex === null) {
+      newChapters.push({
+        ...chapter,
+        updateIndex: newChapters.length,
+      });
+    } else {
+      newChapters[chapter.updateIndex] = chapter;
+    }
+    setCourseData({ ...courseData, chapters: newChapters });
+    setPopupOpen({ open: false, data: null });
+  };
+
+  const removeChapterFromCourse = (chapter) => {
+    const newChapters = [...courseData.chapters];
+    newChapters.splice(chapter.updateIndex, 1);
+    const updatedChapters = newChapters.map((chapter, idx) => ({
+      ...chapter,
+      updateIndex: idx,
+    }));
+    setCourseData({ ...courseData, chapters: updatedChapters });
+    setPopupOpen({ open: false, data: null });
+  };
+
+  const addTopicToCourse = (topic) => {
+    const newTopics = [...courseData.topics];
+    if (topic.updateIndex === null) {
+      newTopics.push({
+        ...topic,
+        updateIndex: newTopics.length,
+      });
+    } else {
+      newTopics[topic.updateIndex] = topic;
+    }
+    setCourseData({ ...courseData, topics: newTopics });
+    setPopupOpen({ open: false, data: null });
+  };
+
   const addSubjectToCourse = (subject) => {
     const newSubjects = [...courseData.subjects];
     if (subject.updateIndex === null) {
@@ -251,6 +299,17 @@ const AddNewCourse = () => {
       updateIndex: idx,
     }));
     setCourseData({ ...courseData, lessons: updatedLessons });
+    setPopupOpen({ open: false, data: null });
+  };
+
+  const removeTopicFromCourse = (topic) => {
+    const newTopics = [...courseData.topics];
+    newTopics.splice(topic.updateIndex, 1);
+    const updatedTopics = newTopics.map((topic, idx) => ({
+      ...topic,
+      updateIndex: idx,
+    }));
+    setCourseData({ ...courseData, topics: updatedTopics });
     setPopupOpen({ open: false, data: null });
   };
 
@@ -511,14 +570,82 @@ const AddNewCourse = () => {
                 className="bg-blue-500 text-white px-3 py-1 rounded cursor-pointer"
                 onClick={() => setPopupOpen({ open: true, data: null })}
               >
-                {useHierarchicalStructure ? "Add Subject" : "Add Lesson"}
+                {useHierarchicalStructure ? "Add Chapter" : "Add Lesson"}
               </div>
             </div>
           </div>
 
           <div className="space-y-4 overflow-auto">
             {useHierarchicalStructure ? (
-              courseData.subjects.length > 0 ? (
+              courseData.chapters.length > 0 ? (
+                courseData.chapters.map((chapter, chapterIndex) => (
+                  <div
+                    key={chapterIndex}
+                    className="border p-4 rounded cursor-pointer hover:bg-gray-50"
+                    onClick={() =>
+                      setPopupOpen({
+                        open: true,
+                        data: { ...chapter, updateIndex: chapterIndex },
+                      })
+                    }
+                  >
+                    <h1 className="text-lg font-semibold">Chapter {chapterIndex + 1}</h1>
+                    <h3 className="text-md font-medium">{chapter.title}</h3>
+                    <div className="mt-2 space-y-2">
+                      {chapter.topics?.map((topic, topicIndex) => (
+                        <div key={topicIndex} className="ml-4 border-l-2 pl-3">
+                          <h4 className="text-sm font-semibold text-gray-700">
+                            Topic: {topic.title}
+                          </h4>
+                          <ul className="list-disc pl-5 mt-1">
+                            {topic.lessons?.map((lesson, lessonIndex) => (
+                              <li key={lessonIndex} className="text-xs text-gray-600">
+                                {lesson.title}
+                                {lesson.file && ` (${lesson.file.type})`}
+                                {lesson.test && " (Test)"}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : courseData.topics.length > 0 ? (
+                courseData.topics.map((topic, topicIndex) => (
+                  <div
+                    key={topicIndex}
+                    className="border p-4 rounded cursor-pointer hover:bg-gray-50"
+                    onClick={() =>
+                      setPopupOpen({
+                        open: true,
+                        data: { ...topic, updateIndex: topicIndex },
+                      })
+                    }
+                  >
+                    <h1 className="text-lg font-semibold">Topic {topicIndex + 1}</h1>
+                    <h3 className="text-md font-medium">{topic.title}</h3>
+                    <div className="mt-2 space-y-2">
+                      {topic.chapters?.map((chapter, chapterIndex) => (
+                        <div key={chapterIndex} className="ml-4 border-l-2 pl-3">
+                          <h4 className="text-sm font-semibold text-gray-700">
+                            Chapter {chapterIndex + 1}: {chapter.title}
+                          </h4>
+                          <ul className="list-disc pl-5 mt-1">
+                            {chapter.lessons?.map((lesson, lessonIndex) => (
+                              <li key={lessonIndex} className="text-xs text-gray-600">
+                                {lesson.title}
+                                {lesson.file && ` (${lesson.file.type})`}
+                                {lesson.test && " (Test)"}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : courseData.subjects.length > 0 ? (
                 courseData.subjects.map((subject, subjectIndex) => (
                   <div
                     key={subjectIndex}
@@ -605,12 +732,21 @@ const AddNewCourse = () => {
       {/* Pop-up component rendering if needed */}
       {popupOpen.open && (
         useHierarchicalStructure ? (
-          <NewSubject
-            addSubject={addSubjectToCourse}
-            editData={popupOpen.data}
-            cancel={() => setPopupOpen({ open: false, data: null })}
-            removeThisSubject={removeSubjectFromCourse}
-          />
+          courseData.chapters.length > 0 || (!courseData.topics.length && !courseData.subjects.length) ? (
+            <NewChapter
+              addChapter={addChapterToCourse}
+              editData={popupOpen.data}
+              cancel={() => setPopupOpen({ open: false, data: null })}
+              removeThisChapter={removeChapterFromCourse}
+            />
+          ) : (
+            <NewTopic
+              addTopic={addTopicToCourse}
+              editData={popupOpen.data}
+              cancel={() => setPopupOpen({ open: false, data: null })}
+              removeThisTopic={removeTopicFromCourse}
+            />
+          )
         ) : (
           <NewLesson
             addLesson={addLessontoCourse}

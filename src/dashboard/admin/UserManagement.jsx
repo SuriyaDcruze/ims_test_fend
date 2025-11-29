@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { GetAllUsers, UpdateUserById, UpdateUserApproval, UpdateUserApproval1, DeleteUserById, ApproveCourseEnrollment, UpdateEnrollmentExpiry, ChangeUserRole } from "../../service/api";
+import {
+  GetAllUsers,
+  UpdateUserById,
+  UpdateUserApproval,
+  UpdateUserApproval1,
+  DeleteUserById,
+  ApproveCourseEnrollment,
+  UpdateEnrollmentExpiry,
+  ChangeUserRole,
+  GetCourseEnrollment,
+  GetCourseProgress,
+} from "../../service/api";
 import { useLoaderData } from "react-router";
 import PageHeader from "../../components/PageHeader";
 
@@ -38,6 +49,13 @@ function UserManagement() {
   const [editedExpiryDates, setEditedExpiryDates] = useState({});
   const [courseActionLoading, setCourseActionLoading] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
+  const [courseDetailsModal, setCourseDetailsModal] = useState({
+    open: false,
+    user: null,
+  });
+  const [userCourseDetails, setUserCourseDetails] = useState([]);
+  const [userCourseDetailsLoading, setUserCourseDetailsLoading] = useState(false);
+  const [userCourseDetailsError, setUserCourseDetailsError] = useState("");
 
   // Handle search input change
   const handleSearchChange = (e) => {
@@ -179,6 +197,65 @@ function UserManagement() {
     setIsViewing(true);
     setErrors({});
     setEditedExpiryDates({});
+  };
+
+  const handleCloseCourseDetails = () => {
+    setCourseDetailsModal({ open: false, user: null });
+    setUserCourseDetails([]);
+    setUserCourseDetailsError("");
+  };
+
+  const handleCourseDetailsView = async (user) => {
+    setCourseDetailsModal({ open: true, user });
+    setUserCourseDetails([]);
+    setUserCourseDetailsError("");
+    setUserCourseDetailsLoading(true);
+
+    try {
+      const enrollmentRes = await GetCourseEnrollment({ userId: user._id });
+      const enrolledCourses = enrollmentRes.enrolledCourses || [];
+      const validCourses = enrolledCourses.filter((enrollment) => {
+        const hasCourse = enrollment.courseId && enrollment.courseId._id;
+        const isApproved = enrollment.isApproved === true;
+        const notExpired = new Date(enrollment.expiryDate) > new Date();
+        return hasCourse && isApproved && notExpired;
+      });
+
+      if (validCourses.length === 0) {
+        setUserCourseDetailsError("No active course purchases found for this user.");
+        setUserCourseDetails([]);
+        return;
+      }
+
+      const courseDetails = [];
+      for (const enrollment of validCourses) {
+        const courseInfo = enrollment.courseId;
+        let percentage = 0;
+        try {
+          const progressRes = await GetCourseProgress(user._id, courseInfo._id);
+          percentage = progressRes.progress?.percentage ?? 0;
+        } catch (error) {
+          percentage = 0;
+        }
+
+        courseDetails.push({
+          id: courseInfo._id,
+          title: courseInfo.title,
+          thumbnail: courseInfo.thumbnail,
+          expiryDate: enrollment.expiryDate,
+          percentage,
+        });
+      }
+
+      setUserCourseDetails(courseDetails);
+    } catch (error) {
+      setUserCourseDetailsError(
+        error.message || "Failed to fetch course details. Please try again."
+      );
+      setUserCourseDetails([]);
+    } finally {
+      setUserCourseDetailsLoading(false);
+    }
   };
 
   // Handle input changes
@@ -340,6 +417,91 @@ function UserManagement() {
     }
   };
 
+  const renderCourseDetailsModal = () => {
+    if (!courseDetailsModal.open) return null;
+
+    const user = courseDetailsModal.user;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
+        <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl">
+          <div className="flex items-start justify-between border-b px-6 py-4">
+            <div>
+              <p className="text-xs uppercase text-gray-500">User Overview</p>
+              <h3 className="text-xl font-semibold text-gray-900">{user?.username}</h3>
+              <p className="text-sm text-gray-500">{user?.email}</p>
+            </div>
+            <button
+              onClick={handleCloseCourseDetails}
+              className="rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="px-6 py-4">
+            {userCourseDetailsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 border-t-transparent"></div>
+              </div>
+            ) : userCourseDetailsError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+                {userCourseDetailsError}
+              </div>
+            ) : userCourseDetails.length === 0 ? (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-600">
+                This user has not purchased any courses yet.
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                {userCourseDetails.map((course) => (
+                  <div
+                    key={course.id}
+                    className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-gradient-to-r from-purple-50 via-white to-white p-4 shadow-sm md:flex-row"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-20 w-20 overflow-hidden rounded-lg border border-purple-100 bg-white shadow-sm">
+                        <img
+                          src={course.thumbnail || "/vite.svg"}
+                          alt={course.title}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = "/vite.svg";
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-900">{course.title}</h4>
+                        <p className="text-sm text-gray-500">
+                          Expires:{" "}
+                          {course.expiryDate
+                            ? new Date(course.expiryDate).toLocaleDateString()
+                            : "Not available"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-gray-700">Completion</span>
+                        <span className="font-semibold text-purple-600">{course.percentage}%</span>
+                      </div>
+                      <div className="mt-2 h-2 rounded-full bg-gray-200">
+                        <div
+                          className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-purple-700 transition-all"
+                          style={{ width: `${Math.min(course.percentage, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Cancel editing or viewing
   const handleCancel = () => {
     setEditingUserId(null);
@@ -369,6 +531,7 @@ function UserManagement() {
 
   return (
     <>
+      {renderCourseDetailsModal()}
       <PageHeader title={showUserDetails ? (isViewing ? "View User Details" : "Edit User Details") : "User Management"} />
       {errors.general && (
         <div className="p-4 bg-red-100 text-red-700 rounded-lg mb-4">
@@ -790,6 +953,14 @@ function UserManagement() {
                     <span className="font-medium">{index + 1}. {user.username}</span>
                     <div className="flex space-x-2">
                       <button
+                        onClick={() => handleCourseDetailsView(user)}
+                        className="rounded-full border border-purple-200 px-3 py-1 text-sm font-semibold text-purple-600 hover:bg-purple-50"
+                        title="View Course Details"
+                        disabled={userCourseDetailsLoading}
+                      >
+                        View
+                      </button>
+                      <button
                         onClick={() => handleView(user._id)}
                         className="text-green-600 hover:text-green-800"
                         title="View User Details"
@@ -863,6 +1034,7 @@ function UserManagement() {
                     <th className="px-4 py-3 text-left font-medium text-gray-900 min-w-[200px]">Email</th>
                     <th className="px-4 py-3 text-left font-medium text-gray-900 min-w-[120px]">Date of Birth</th>
                     <th className="px-4 py-3 text-left font-medium text-gray-900 min-w-[100px]">Gender</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-900 min-w-[120px]">Course Details</th>
                     <th className="px-4 py-3 text-center font-medium text-gray-900 min-w-[100px]">Approved</th>
                     <th className="px-4 py-3 text-center font-medium text-gray-900 min-w-[100px]">Actions</th>
                   </tr>
@@ -876,6 +1048,15 @@ function UserManagement() {
                         <td className="px-4 py-3 whitespace-nowrap text-gray-700">{user.email}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-gray-700">{user.dob ? new Date(user.dob).toLocaleDateString() : ''}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-gray-700">{user.gender}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          <button
+                            onClick={() => handleCourseDetailsView(user)}
+                            className="inline-flex items-center justify-center rounded-full border border-purple-200 px-3 py-1 text-sm font-semibold text-purple-600 hover:bg-purple-50"
+                            disabled={userCourseDetailsLoading}
+                          >
+                            View
+                          </button>
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap text-center">
                           <ToggleSwitch
                             isApproved={user.isApproved}

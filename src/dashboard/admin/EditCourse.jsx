@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import NewLesson from "./NewLesson";
+import NewTopic from "./NewTopic";
+import NewChapter from "./NewChapter";
 import axios from "axios";
 import {
   DeleteCourseById,
@@ -72,9 +74,13 @@ const EditCourse = () => {
     thumbnail: null,
     overviewPoints: [],
     lessons: [],
+    chapters: [],
+    topics: [],
+    subjects: [],
     whatYouGet: [],
     whoIsThisFor: [],
   });
+  const [useHierarchicalStructure, setUseHierarchicalStructure] = useState(true);
 
   // Scroll to top when popup opens
   useEffect(() => {
@@ -105,11 +111,24 @@ const EditCourse = () => {
                   : [],
               }))
             : [],
+          chapters: Array.isArray(res.chapters) ? res.chapters : [],
+          topics: Array.isArray(res.topics) ? res.topics : [],
+          subjects: Array.isArray(res.subjects) ? res.subjects : [],
           whatYouGet: Array.isArray(res.whatYouGet) ? res.whatYouGet : [],
           whoIsThisFor: Array.isArray(res.whoIsThisFor) ? res.whoIsThisFor : [],
         };
         setCourseData(safeCourseData);
         setSelectedFileName(res.thumbnail ? "Current Thumbnail" : "");
+        // Determine which structure to use based on data
+        if (res.chapters && res.chapters.length > 0) {
+          setUseHierarchicalStructure(true);
+        } else if (res.topics && res.topics.length > 0) {
+          setUseHierarchicalStructure(true);
+        } else if (res.subjects && res.subjects.length > 0) {
+          setUseHierarchicalStructure(true);
+        } else if (res.lessons && res.lessons.length > 0) {
+          setUseHierarchicalStructure(false);
+        }
       } catch (error) {
         console.error("Failed to fetch course:", error);
         setError("Failed to load course data. Please try again.");
@@ -125,6 +144,15 @@ const EditCourse = () => {
     if (!courseData.description) errors.description = "Description is required";
     if (!courseData.price || isNaN(courseData.price) || courseData.price <= 0) {
       errors.price = "Valid price is required";
+    }
+    if (useHierarchicalStructure) {
+      if (courseData.chapters.length === 0 && courseData.topics.length === 0 && courseData.subjects.length === 0) {
+        errors.structure = "At least one chapter is required";
+      }
+    } else {
+      if (courseData.lessons.length === 0) {
+        errors.lessons = "At least one lesson is required";
+      }
     }
     return errors;
   };
@@ -247,6 +275,60 @@ const EditCourse = () => {
   const setEditValuesWho = (item, index) => {
     setCurrentWho(item);
     setEditIndexWho(index);
+  };
+
+  // Add or update chapter
+  const addChapterToCourse = (chapter) => {
+    const newChapters = [...courseData.chapters];
+    if (chapter.updateIndex === null || chapter.updateIndex === undefined) {
+      newChapters.push({
+        ...chapter,
+        updateIndex: newChapters.length > 0 ? newChapters.length : 0,
+      });
+    } else {
+      newChapters[chapter.updateIndex] = chapter;
+    }
+    setCourseData({ ...courseData, chapters: newChapters });
+    setPopupOpen({ open: false, data: null });
+  };
+
+  // Remove chapter from course
+  const removeChapterFromCourse = (chapter) => {
+    if (!chapter || chapter.updateIndex === undefined) return;
+    const newChapters = [...courseData.chapters];
+    newChapters.splice(chapter.updateIndex, 1);
+    const updatedChapters = newChapters.map((chapter, idx) => ({
+      ...chapter,
+      updateIndex: idx,
+    }));
+    setCourseData({ ...courseData, chapters: updatedChapters });
+  };
+
+  // Add or update topic
+  const addTopicToCourse = (topic) => {
+    const newTopics = [...courseData.topics];
+    if (topic.updateIndex === null || topic.updateIndex === undefined) {
+      newTopics.push({
+        ...topic,
+        updateIndex: newTopics.length > 0 ? newTopics.length : 0,
+      });
+    } else {
+      newTopics[topic.updateIndex] = topic;
+    }
+    setCourseData({ ...courseData, topics: newTopics });
+    setPopupOpen({ open: false, data: null });
+  };
+
+  // Remove topic from course
+  const removeTopicFromCourse = (topic) => {
+    if (!topic || topic.updateIndex === undefined) return;
+    const newTopics = [...courseData.topics];
+    newTopics.splice(topic.updateIndex, 1);
+    const updatedTopics = newTopics.map((topic, idx) => ({
+      ...topic,
+      updateIndex: idx,
+    }));
+    setCourseData({ ...courseData, topics: updatedTopics });
   };
 
   // Add or update lesson
@@ -522,67 +604,254 @@ const EditCourse = () => {
         <form className="form-right flex-1">
           <div className="form-right-header flex justify-between items-center mb-6">
             <h3 className="course-new-title text-2xl font-semibold">
-              List The Lessons
+              {useHierarchicalStructure ? "Course Structure" : "List The Lessons"}
             </h3>
             {editCourse && (
-              <div
-                className="addgaanew-lesson-btn bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer"
-                onClick={() => setPopupOpen({ open: true, data: null })}
-              >
-                Add new lesson
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`px-3 py-1 rounded text-sm ${
+                    useHierarchicalStructure
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-200 text-gray-700"
+                  }`}
+                  onClick={() => setUseHierarchicalStructure(true)}
+                >
+                  Hierarchical
+                </button>
+                <button
+                  type="button"
+                  className={`px-3 py-1 rounded text-sm ${
+                    !useHierarchicalStructure
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-200 text-gray-700"
+                  }`}
+                  onClick={() => setUseHierarchicalStructure(false)}
+                >
+                  Lessons
+                </button>
+                <div
+                  className="addgaanew-lesson-btn bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer"
+                  onClick={() => setPopupOpen({ open: true, data: null })}
+                >
+                  {useHierarchicalStructure ? "Add Chapter" : "Add Lesson"}
+                </div>
               </div>
             )}
           </div>
 
           <div className="lesson-list-cnt">
-            {courseData.lessons.length > 0 ? (
-              courseData.lessons.map((lesson, index) => (
-                <div
-                  className="lesson bg-white p-4 mb-4 rounded shadow-lg cursor-pointer"
-                  key={index}
-                  style={{ pointerEvents: editCourse ? "all" : "none" }}
-                  onClick={() => openEditLesson(lesson, index)}
-                >
-                  <h1 className="lesson-number text-xl font-semibold">
-                    {index + 1}
-                  </h1>
-                  <div className="lesson-title-cnt mt-2">
-                    <h3 className="lesson-title text-lg font-semibold">
-                      {lesson.title}
-                    </h3>
+            {useHierarchicalStructure ? (
+              courseData.chapters.length > 0 ? (
+                courseData.chapters.map((chapter, chapterIndex) => (
+                  <div
+                    key={chapterIndex}
+                    className="lesson bg-white p-4 mb-4 rounded shadow-lg cursor-pointer"
+                    style={{ pointerEvents: editCourse ? "all" : "none" }}
+                    onClick={() => editCourse && setPopupOpen({ open: true, data: { ...chapter, updateIndex: chapterIndex } })}
+                  >
+                    <h1 className="lesson-number text-xl font-semibold">
+                      Chapter {chapterIndex + 1}
+                    </h1>
+                    <div className="lesson-title-cnt mt-2">
+                      <h3 className="lesson-title text-lg font-semibold">
+                        {chapter.title}
+                      </h3>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {chapter.topics?.map((topic, topicIndex) => (
+                        <div key={topicIndex} className="ml-4 border-l-2 pl-3 border-blue-200">
+                          <div className="p-2 bg-blue-50">
+                            <p className="text-sm font-semibold text-blue-800">
+                              Topic: {topic.title}
+                            </p>
+                          </div>
+                          <ul className="lesson-subtitle-cnt">
+                            {topic.lessons?.map((lesson, lessonIndex) => (
+                              <li key={lessonIndex} className="text-xs text-gray-600">
+                                <p className="lesson-subtitle text-sm">{lesson.title}</p>
+                                {lesson.file && (
+                                  <p className="lesson-duration-txt text-sm text-gray-500">
+                                    {lesson.file.type}
+                                  </p>
+                                )}
+                                {lesson.test && (
+                                  <p className="lesson-duration-txt text-sm text-blue-500">
+                                    Test Added
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <ul className="lesson-subtitle-cnt mt-4">
-                    {lesson.chapter.map((video, idx) => (
-                      <li key={idx}>
-                        <p className="lesson-subtitle text-sm">{video.title}</p>
-                        <p className="lesson-duration-txt text-sm text-gray-600">
-                          duration: {video.duration}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
+                ))
+              ) : courseData.topics.length > 0 ? (
+                courseData.topics.map((topic, topicIndex) => (
+                  <div
+                    key={topicIndex}
+                    className="lesson bg-white p-4 mb-4 rounded shadow-lg cursor-pointer"
+                    style={{ pointerEvents: editCourse ? "all" : "none" }}
+                    onClick={() => editCourse && setPopupOpen({ open: true, data: { ...topic, updateIndex: topicIndex } })}
+                  >
+                    <h1 className="lesson-number text-xl font-semibold">
+                      Topic {topicIndex + 1}
+                    </h1>
+                    <div className="lesson-title-cnt mt-2">
+                      <h3 className="lesson-title text-lg font-semibold">
+                        {topic.title}
+                      </h3>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {topic.chapters?.map((chapter, chapterIndex) => (
+                        <div key={chapterIndex} className="ml-4 border-l-2 pl-3 border-blue-200">
+                          <h4 className="text-sm font-semibold text-blue-800 mb-1">
+                            Chapter {chapterIndex + 1}: {chapter.title}
+                          </h4>
+                          <ul className="lesson-subtitle-cnt">
+                            {chapter.lessons?.map((lesson, lessonIndex) => (
+                              <li key={lessonIndex} className="text-xs text-gray-600">
+                                <p className="lesson-subtitle text-sm">{lesson.title}</p>
+                                {lesson.file && (
+                                  <p className="lesson-duration-txt text-sm text-gray-500">
+                                    {lesson.file.type}
+                                  </p>
+                                )}
+                                {lesson.test && (
+                                  <p className="lesson-duration-txt text-sm text-blue-500">
+                                    Test Added
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : courseData.subjects.length > 0 ? (
+                courseData.subjects.map((subject, subjectIndex) => (
+                  <div
+                    key={subjectIndex}
+                    className="lesson bg-white p-4 mb-4 rounded shadow-lg cursor-pointer"
+                    style={{ pointerEvents: editCourse ? "all" : "none" }}
+                  >
+                    <h1 className="lesson-number text-xl font-semibold">
+                      Subject {subjectIndex + 1}
+                    </h1>
+                    <div className="lesson-title-cnt mt-2">
+                      <h3 className="lesson-title text-lg font-semibold">
+                        {subject.title}
+                      </h3>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {subject.topics?.map((topic, topicIndex) => (
+                        <div key={topicIndex} className="ml-4 border-l-2 pl-3 border-blue-200">
+                          <h4 className="text-sm font-semibold text-blue-800 mb-1">
+                            Topic {topicIndex + 1}: {topic.title}
+                          </h4>
+                          <ul className="lesson-subtitle-cnt">
+                            {topic.subTopics?.map((subTopic, subTopicIndex) => (
+                              <li key={subTopicIndex} className="text-xs text-gray-600">
+                                <p className="lesson-subtitle text-sm">{subTopic.title}</p>
+                                {subTopic.file && (
+                                  <p className="lesson-duration-txt text-sm text-gray-500">
+                                    {subTopic.file.type}
+                                  </p>
+                                )}
+                                {subTopic.test && (
+                                  <p className="lesson-duration-txt text-sm text-blue-500">
+                                    Test Added
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="no-lesson-cnt flex justify-center items-center py-10">
+                  <img
+                    src={NoLesson}
+                    alt="no-topic"
+                    className="empty-lesson-img"
+                  />
                 </div>
-              ))
+              )
             ) : (
-              <div className="no-lesson-cnt flex justify-center items-center py-10">
-                <img
-                  src={NoLesson}
-                  alt="no-lesson"
-                  className="empty-lesson-img"
-                />
-              </div>
+              courseData.lessons.length > 0 ? (
+                courseData.lessons.map((lesson, index) => (
+                  <div
+                    className="lesson bg-white p-4 mb-4 rounded shadow-lg cursor-pointer"
+                    key={index}
+                    style={{ pointerEvents: editCourse ? "all" : "none" }}
+                    onClick={() => openEditLesson(lesson, index)}
+                  >
+                    <h1 className="lesson-number text-xl font-semibold">
+                      {index + 1}
+                    </h1>
+                    <div className="lesson-title-cnt mt-2">
+                      <h3 className="lesson-title text-lg font-semibold">
+                        {lesson.title}
+                      </h3>
+                    </div>
+                    <ul className="lesson-subtitle-cnt mt-4">
+                      {lesson.chapter.map((video, idx) => (
+                        <li key={idx}>
+                          <p className="lesson-subtitle text-sm">{video.title}</p>
+                          <p className="lesson-duration-txt text-sm text-gray-600">
+                            duration: {video.duration}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              ) : (
+                <div className="no-lesson-cnt flex justify-center items-center py-10">
+                  <img
+                    src={NoLesson}
+                    alt="no-lesson"
+                    className="empty-lesson-img"
+                  />
+                </div>
+              )
             )}
           </div>
         </form>
       </div>
 
       {popupOpen.open && (
-        <NewLesson
-          addLesson={addLessontoCourse}
-          editData={popupOpen.data}
-          cancel={() => setPopupOpen({ open: false, data: null })}
-          removeThisLesson={removeLessonFromCourse}
-        />
+        useHierarchicalStructure ? (
+          courseData.chapters.length > 0 || (!courseData.topics.length && !courseData.subjects.length) ? (
+            <NewChapter
+              addChapter={addChapterToCourse}
+              editData={popupOpen.data}
+              cancel={() => setPopupOpen({ open: false, data: null })}
+              removeThisChapter={removeChapterFromCourse}
+            />
+          ) : (
+            <NewTopic
+              addTopic={addTopicToCourse}
+              editData={popupOpen.data}
+              cancel={() => setPopupOpen({ open: false, data: null })}
+              removeThisTopic={removeTopicFromCourse}
+            />
+          )
+        ) : (
+          <NewLesson
+            addLesson={addLessontoCourse}
+            editData={popupOpen.data}
+            cancel={() => setPopupOpen({ open: false, data: null })}
+            removeThisLesson={removeLessonFromCourse}
+          />
+        )
       )}
     </div>
   );

@@ -112,15 +112,18 @@ function CoursePage() {
           userId: UserInfo.user._id,
         });
   
-        // Filter for only approved and not expired enrollments
+        // Filter for only approved and not expired enrollments with valid courseId
         const validEnrollments = enrollment.enrolledCourses.filter((item) => {
+          const hasCourseId = item.courseId && item.courseId._id;
           const isApproved = item.isApproved === true;
           const notExpired = new Date(item.expiryDate) > new Date();
-          return isApproved && notExpired;
+          return hasCourseId && isApproved && notExpired;
         });
   
         // Now extract only the valid course IDs
-        const courseIds = validEnrollments.map((item) => item.courseId._id);
+        const courseIds = validEnrollments
+          .map((item) => item.courseId?._id)
+          .filter((id) => id !== null && id !== undefined);
         setPurchasedCoursesIds(courseIds);
       } catch (error) {
         console.error("Error fetching courses or enrollments:", error);

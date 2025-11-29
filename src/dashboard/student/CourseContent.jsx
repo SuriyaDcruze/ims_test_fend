@@ -9,6 +9,7 @@ import {
   PlayCircle,
   Maximize2,
   Minimize2,
+  FileText,
 } from "lucide-react";
 // import * as pdfjsLib from "pdfjs-dist";
 // import pdfjsWorker from "pdfjs-dist/build/pdf.worker.entry";
@@ -32,9 +33,17 @@ function CourseContent() {
   const [currentContent, setCurrentContent] = useState(null);
   const [currentLessonIndex, setCurrentLessonIndex] = useState(0);
   const [currentSubLessonIndex, setCurrentSubLessonIndex] = useState(0);
-  // For hierarchical structure
-  const [currentSubjectIndex, setCurrentSubjectIndex] = useState(0);
+  // For new hierarchical structure: Course → Chapter → Topic → Lesson
+  const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [currentTopicIndex, setCurrentTopicIndex] = useState(0);
+  const [currentLessonIndexInTopic, setCurrentLessonIndexInTopic] = useState(0);
+  // For old hierarchical structure: Course → Topic → Chapter → Lesson
+  const [currentTopicIndexOld, setCurrentTopicIndexOld] = useState(0);
+  const [currentChapterIndexOld, setCurrentChapterIndexOld] = useState(0);
+  const [currentLessonIndexInChapter, setCurrentLessonIndexInChapter] = useState(0);
+  // For old hierarchical structure: Course → Subject → Topic → SubTopic
+  const [currentSubjectIndex, setCurrentSubjectIndex] = useState(0);
+  const [currentSubjectTopicIndex, setCurrentSubjectTopicIndex] = useState(0);
   const [currentSubTopicIndex, setCurrentSubTopicIndex] = useState(0);
   const [activeAccordion, setActiveAccordion] = useState(null);
   const [completedExercises, setCompletedExercises] = useState(new Set());
@@ -62,13 +71,63 @@ function CourseContent() {
           throw new Error("Course not found");
         }
 
-        // Normalize course data - support both hierarchical and old structure
+        // Normalize course data - support all structures
         const normalizedData = {
           _id: courseData._id,
           title: courseData.title || "Untitled Course",
           thumbnail: courseData.thumbnail || "",
           description: courseData.description || "",
-          // New hierarchical structure
+          // New hierarchical structure: Course → Chapter → Topic → Lesson
+          chapters: courseData.chapters?.map((chapter) => ({
+            title: chapter.title || "Untitled Chapter",
+            topics: chapter.topics?.map((topic) => ({
+              title: topic.title || "Untitled Topic",
+              lessons: topic.lessons?.map((lesson) => ({
+                title: lesson.title || "Untitled Lesson",
+                file: lesson.file
+                  ? {
+                      url: lesson.file.url,
+                      type: lesson.file.type.includes("pdf")
+                        ? "pdf"
+                        : lesson.file.type.includes("video")
+                        ? "video"
+                        : lesson.file.type.includes("audio")
+                        ? "audio"
+                        : lesson.file.type,
+                    }
+                  : undefined,
+                test: lesson.test
+                  ? { questions: lesson.test.questions || [] }
+                  : { questions: [] },
+              })) || [],
+            })) || [],
+          })) || [],
+          // Old hierarchical structure: Course → Topic → Chapter → Lesson
+          topics: courseData.topics?.map((topic) => ({
+            title: topic.title || "Untitled Topic",
+            chapters: topic.chapters?.map((chapter) => ({
+              title: chapter.title || "Untitled Chapter",
+              lessons: chapter.lessons?.map((lesson) => ({
+                title: lesson.title || "Untitled Lesson",
+                file: lesson.file
+                  ? {
+                      url: lesson.file.url,
+                      type: lesson.file.type.includes("pdf")
+                        ? "pdf"
+                        : lesson.file.type.includes("video")
+                        ? "video"
+                        : lesson.file.type.includes("audio")
+                        ? "audio"
+                        : lesson.file.type,
+                    }
+                  : undefined,
+                test: lesson.test
+                  ? { questions: lesson.test.questions || [] }
+                  : { questions: [] },
+              })) || [],
+            })) || [],
+          })) || [],
+          // Old hierarchical structure: Course → Subject → Topic → SubTopic (for backward compatibility)
           subjects: courseData.subjects?.map((subject) => ({
             title: subject.title || "Untitled Subject",
             topics: subject.topics?.map((topic) => ({
@@ -93,7 +152,7 @@ function CourseContent() {
               })) || [],
             })) || [],
           })) || [],
-          // Old structure (for backward compatibility)
+          // Old structure: Course → Lesson → Sublesson (for backward compatibility)
           lessons: courseData.lessons?.map((lesson) => ({
             title: lesson.title || "Untitled Lesson",
             sublessons: lesson.sublessons?.map((sub) => ({
@@ -120,8 +179,24 @@ function CourseContent() {
         setCourse(normalizedData);
         
         // Initialize with first available content
-        if (normalizedData?.subjects?.[0]?.topics?.[0]?.subTopics?.[0]) {
-          // Hierarchical structure
+        if (normalizedData?.chapters?.[0]?.topics?.[0]?.lessons?.[0]) {
+          // New hierarchical structure: Course → Chapter → Topic → Lesson
+          handleContentSelect(
+            normalizedData.chapters[0].topics[0].lessons[0],
+            0, // chapterIndex
+            0, // topicIndex
+            0  // lessonIndex
+          );
+        } else if (normalizedData?.topics?.[0]?.chapters?.[0]?.lessons?.[0]) {
+          // Old hierarchical structure: Course → Topic → Chapter → Lesson
+          handleContentSelect(
+            normalizedData.topics[0].chapters[0].lessons[0],
+            0, // topicIndex
+            0, // chapterIndex
+            0  // lessonIndex
+          );
+        } else if (normalizedData?.subjects?.[0]?.topics?.[0]?.subTopics?.[0]) {
+          // Old hierarchical structure: Course → Subject → Topic → SubTopic
           handleContentSelect(
             normalizedData.subjects[0].topics[0].subTopics[0],
             0, // subjectIndex
@@ -129,7 +204,7 @@ function CourseContent() {
             0  // subTopicIndex
           );
         } else if (normalizedData?.lessons?.[0]?.sublessons?.[0]) {
-          // Old structure
+          // Old structure: Course → Lesson → Sublesson
           handleContentSelect(normalizedData.lessons[0].sublessons[0], 0, 0);
         } else {
           setError("No content available for this course");
@@ -149,26 +224,46 @@ function CourseContent() {
     try {
       const res = await GetCourseProgress(UserInfo.user._id, id);
       const completed = new Set();
-      const progressData = res.progress;
-      progressData.completedLessons.forEach((lesson) => {
-        lesson.sublessons?.forEach((subLesson) => {
-          if (subLesson.isCompleted) {
-            completed.add(
-              `${lesson.lessonIndex}-${subLesson.sublessonIndex}`
-            );
-          }
-        });
-      });
+      const progressData = res?.progress;
+      
+      // Handle different structure types for progress
+      if (progressData) {
+        // New structure: chapters -> topics -> lessons
+        if (course?.chapters && progressData.completedLessons) {
+          progressData.completedLessons.forEach((lesson) => {
+            if (lesson.chapterIndex !== undefined && lesson.topicIndex !== undefined && lesson.lessonIndex !== undefined) {
+              completed.add(`${lesson.chapterIndex}-${lesson.topicIndex}-${lesson.lessonIndex}`);
+            }
+          });
+        }
+        // Old structure: lessons -> sublessons
+        else if (progressData.completedLessons && Array.isArray(progressData.completedLessons)) {
+          progressData.completedLessons.forEach((lesson) => {
+            if (lesson.sublessons && Array.isArray(lesson.sublessons)) {
+              lesson.sublessons.forEach((subLesson) => {
+                if (subLesson.isCompleted && lesson.lessonIndex !== undefined && subLesson.sublessonIndex !== undefined) {
+                  completed.add(
+                    `${lesson.lessonIndex}-${subLesson.sublessonIndex}`
+                  );
+                }
+              });
+            }
+          });
+        }
+      }
+      
       setCompletedExercises(completed);
     } catch (error) {
       console.error("Failed to fetch course progress:", error);
+      // Set empty set on error to avoid breaking the UI
+      setCompletedExercises(new Set());
     }
   };
 
-  if (UserInfo?.user?._id && id) {
+  if (UserInfo?.user?._id && id && course) {
     fetchCourseProgress();
   }
-}, [id]);
+}, [id, course]);
 
 
   // useEffect(() => {
@@ -202,28 +297,43 @@ function CourseContent() {
   // }, [id]);
 
   const handleContentSelect = (content, index1, index2, index3 = null) => {
-    if (!content) return;
+    if (!content || !course) return;
     
-    // If index3 is provided, it's hierarchical structure (subject, topic, subTopic)
-    // Otherwise it's old structure (lesson, sublesson)
+    // Determine structure type based on course data and indices
+    const isNewHierarchical = course?.chapters && course.chapters.length > 0 && index3 !== null;
+    const isOldTopicHierarchical = course?.topics && course.topics.length > 0 && index3 !== null && !isNewHierarchical;
+    const isOldHierarchical = course?.subjects && course.subjects.length > 0 && index3 !== null && !isOldTopicHierarchical;
+    
     const contentData = {
       ...content,
-      lessonNo: index3 !== null ? index1 + 1 : index1 + 1,
-      exerciseNo: index3 !== null ? index3 + 1 : index2 + 1,
+      lessonNo: isNewHierarchical ? index1 + 1 : isOldTopicHierarchical ? index1 + 1 : isOldHierarchical ? index1 + 1 : index1 + 1,
+      exerciseNo: isNewHierarchical ? index3 + 1 : isOldTopicHierarchical ? index3 + 1 : isOldHierarchical ? index3 + 1 : index2 + 1,
       type: content.test?.questions?.length > 0 ? "test" : content.file?.type || "unknown",
-      isHierarchical: index3 !== null,
+      structureType: isNewHierarchical ? "new" : isOldTopicHierarchical ? "old_topic_hierarchical" : isOldHierarchical ? "old_hierarchical" : "old",
     };
     
     setCurrentContent(contentData);
     
-    if (index3 !== null) {
-      // Hierarchical structure
-      setCurrentSubjectIndex(index1);
+    if (isNewHierarchical) {
+      // New hierarchical structure: Course → Chapter → Topic → Lesson
+      setCurrentChapterIndex(index1);
       setCurrentTopicIndex(index2);
+      setCurrentLessonIndexInTopic(index3);
+      setActiveAccordion(index1);
+    } else if (isOldTopicHierarchical) {
+      // Old hierarchical structure: Course → Topic → Chapter → Lesson
+      setCurrentTopicIndexOld(index1);
+      setCurrentChapterIndexOld(index2);
+      setCurrentLessonIndexInChapter(index3);
+      setActiveAccordion(index1);
+    } else if (isOldHierarchical) {
+      // Old hierarchical structure: Course → Subject → Topic → SubTopic
+      setCurrentSubjectIndex(index1);
+      setCurrentSubjectTopicIndex(index2);
       setCurrentSubTopicIndex(index3);
       setActiveAccordion(index1);
     } else {
-      // Old structure
+      // Old structure: Course → Lesson → Sublesson
       setCurrentLessonIndex(index1);
       setCurrentSubLessonIndex(index2);
       setActiveAccordion(index1);
@@ -581,11 +691,46 @@ function CourseContent() {
   };
 
   const calculateProgress = () => {
-    if (!course?.lessons) return 0;
-    const totalExercises = course.lessons.reduce(
-      (total, lesson) => total + (lesson.sublessons?.length || 0),
-      0
-    );
+    let totalExercises = 0;
+    
+    // Check for new hierarchical structure: Course → Chapter → Topic → Lesson
+    if (course?.chapters && course.chapters.length > 0) {
+      course.chapters.forEach((chapter) => {
+        chapter.topics?.forEach((topic) => {
+          topic.lessons?.forEach(() => {
+            totalExercises++;
+          });
+        });
+      });
+    } 
+    // Check for old hierarchical structure: Course → Topic → Chapter → Lesson
+    else if (course?.topics && course.topics.length > 0) {
+      course.topics.forEach((topic) => {
+        topic.chapters?.forEach((chapter) => {
+          chapter.lessons?.forEach(() => {
+            totalExercises++;
+          });
+        });
+      });
+    } 
+    // Check for old hierarchical structure: Course → Subject → Topic → SubTopic
+    else if (course?.subjects && course.subjects.length > 0) {
+      course.subjects.forEach((subject) => {
+        subject.topics?.forEach((topic) => {
+          topic.subTopics?.forEach(() => {
+            totalExercises++;
+          });
+        });
+      });
+    }
+    // Check for old structure: Course → Lesson → Sublesson
+    else if (course?.lessons) {
+      totalExercises = course.lessons.reduce(
+        (total, lesson) => total + (lesson.sublessons?.length || 0),
+        0
+      );
+    }
+    
     return totalExercises > 0
       ? Math.round((completedExercises.size / totalExercises) * 100)
       : 0;
@@ -657,8 +802,200 @@ function CourseContent() {
             Contents
           </h3>
           <div className="overflow-y-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[calc(100vh-20rem)] flex-1">
-            {/* Hierarchical Structure */}
-            {course.subjects && course.subjects.length > 0 ? (
+            {!course ? (
+              <div className="p-4 text-center text-gray-500">
+                Loading course content...
+              </div>
+            ) : (
+              <>
+            {/* New Hierarchical Structure: Course → Chapter → Topic */}
+            {course?.chapters && course.chapters.length > 0 ? (
+              course.chapters.map((chapter, chapterIndex) => {
+                return (
+                  <div key={`chapter-${chapterIndex}`} className="shadow-sm rounded mb-2 bg-white mx-2">
+                    <button
+                      onClick={() =>
+                        setActiveAccordion(
+                          activeAccordion === chapterIndex ? null : chapterIndex
+                        )
+                      }
+                      className={`w-full flex justify-between items-center p-3 px-4 gap-2 text-left text-sm font-medium hover:bg-green-100 focus:outline-none ${
+                        "bg-white text-gray-900"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-sm lg:text-base font-semibold leading-6">
+                        <BookOpen className="h-5 w-5" />
+                        Chapter {chapterIndex + 1}: {chapter.title}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 transition-transform ${
+                          activeAccordion === chapterIndex ? "rotate-180" : ""
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+                    <div
+                      className={`overflow-hidden transition-max-height duration-300 text-sm font-medium leading-6 tracking-wider text-gray-700 ${
+                        activeAccordion === chapterIndex ? "max-h-full" : "max-h-0"
+                      }`}
+                    >
+                      {chapter.topics?.map((topic, topicIndex) => (
+                        <div key={`topic-${topicIndex}`} className="border-l-2 border-blue-200 ml-4">
+                          <details className="px-2 py-1 bg-blue-50 border border-blue-100">
+                            <summary className="cursor-pointer flex px-2 py-2 items-center justify-between gap-2 text-blue-800 font-semibold text-xs hover:bg-blue-100">
+                              <div className="flex items-center gap-2">
+                                <FileText className="h-3 w-3 text-blue-700" />
+                                <span>Topic: {topic.title}</span>
+                              </div>
+                              <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                                {topic.lessons?.length || 0}
+                              </span>
+                            </summary>
+                            <div className="pl-4 px-2 py-1">
+                              {topic.lessons?.map((lesson, lessonIndex) => {
+                                const isCompleted = completedExercises.has(
+                                  `${chapterIndex}-${topicIndex}-${lessonIndex}`
+                                );
+                                const isActive =
+                                  currentChapterIndex === chapterIndex &&
+                                  currentTopicIndex === topicIndex &&
+                                  currentLessonIndexInTopic === lessonIndex;
+                                return (
+                                  <button
+                                    key={`lesson-${lessonIndex}`}
+                                    onClick={() =>
+                                      handleContentSelect(
+                                        lesson,
+                                        chapterIndex,
+                                        topicIndex,
+                                        lessonIndex
+                                      )
+                                    }
+                                    className={`p-2 px-3 flex w-full text-xs sm:text-sm font-semibold items-center gap-2 hover:bg-green-200 rounded-md ${
+                                      isCompleted ? "bg-green-100 text-green-800" : ""
+                                    } ${
+                                      isActive ? "bg-blue-100 text-blue-600" : ""
+                                    }`}
+                                  >
+                                    {isCompleted ? (
+                                      <Check className="h-3 w-3" />
+                                    ) : lesson.test?.questions?.length > 0 ? (
+                                      <BookCheck className="h-3 w-3" />
+                                    ) : (
+                                      <PlayCircle className="h-3 w-3" />
+                                    )}
+                                    <span className="text-left">Lesson {lessonIndex + 1}: {lesson.title}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            ) : course?.topics && course.topics.length > 0 ? (
+              /* Old Hierarchical Structure: Course → Topic → Chapter → Lesson */
+              course.topics.map((topic, topicIndex) => {
+                return (
+                  <div key={`topic-${topicIndex}`} className="shadow-sm rounded mb-2 bg-white mx-2">
+                    <button
+                      onClick={() =>
+                        setActiveAccordion(
+                          activeAccordion === topicIndex ? null : topicIndex
+                        )
+                      }
+                      className={`w-full flex justify-between items-center p-3 px-4 gap-2 text-left text-sm font-medium hover:bg-green-100 focus:outline-none ${
+                        "bg-white text-gray-900"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-sm lg:text-base font-semibold leading-6">
+                        <BookOpen className="h-5 w-5" />
+                        Topic {topicIndex + 1}: {topic.title}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 transition-transform ${
+                          activeAccordion === topicIndex ? "rotate-180" : ""
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+                    <div
+                      className={`overflow-hidden transition-max-height duration-300 text-sm font-medium leading-6 tracking-wider text-gray-700 ${
+                        activeAccordion === topicIndex ? "max-h-full" : "max-h-0"
+                      }`}
+                    >
+                      {topic.chapters?.map((chapter, chapterIndex) => (
+                        <div key={`chapter-${chapterIndex}`} className="border-l-2 border-blue-200 ml-4">
+                          <div className="p-2 bg-blue-50">
+                            <p className="text-xs font-semibold text-blue-800">
+                              Chapter {chapterIndex + 1}: {chapter.title}
+                            </p>
+                          </div>
+                          {chapter.lessons?.map((lesson, lessonIndex) => {
+                            const isCompleted = completedExercises.has(
+                              `${topicIndex}-${chapterIndex}-${lessonIndex}`
+                            );
+                            const isActive =
+                              currentTopicIndexOld === topicIndex &&
+                              currentChapterIndexOld === chapterIndex &&
+                              currentLessonIndexInChapter === lessonIndex;
+                            return (
+                              <button
+                                key={`lesson-${lessonIndex}`}
+                                onClick={() =>
+                                  handleContentSelect(
+                                    lesson,
+                                    topicIndex,
+                                    chapterIndex,
+                                    lessonIndex
+                                  )
+                                }
+                                className={`p-3 px-4 flex w-full text-xs sm:text-sm lg:text-base font-semibold items-center gap-2 hover:bg-green-200 ${
+                                  isCompleted ? "bg-green-100 text-green-800" : ""
+                                } ${
+                                  isActive ? "bg-blue-100 text-blue-600" : ""
+                                }`}
+                              >
+                                {isCompleted ? (
+                                  <Check />
+                                ) : lesson.test?.questions?.length > 0 ? (
+                                  <BookCheck />
+                                ) : (
+                                  <PlayCircle />
+                                )}
+                                {lesson.title}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            ) : course?.subjects && course.subjects.length > 0 ? (
+              /* Old Hierarchical Structure: Course → Subject → Topic → SubTopic */
               course.subjects.map((subject, subjectIndex) => {
                 return (
                   <div key={`subject-${subjectIndex}`} className="shadow-sm rounded mb-2 bg-white mx-2">
@@ -710,7 +1047,7 @@ function CourseContent() {
                             );
                             const isActive =
                               currentSubjectIndex === subjectIndex &&
-                              currentTopicIndex === topicIndex &&
+                              currentSubjectTopicIndex === topicIndex &&
                               currentSubTopicIndex === subTopicIndex;
                             return (
                               <button
@@ -746,9 +1083,9 @@ function CourseContent() {
                   </div>
                 );
               })
-            ) : (
+            ) : course?.lessons && course.lessons.length > 0 ? (
               /* Old Structure */
-              course.lessons?.map((lesson, lessonIndex) => {
+              course.lessons.map((lesson, lessonIndex) => {
                 const isLessonCompleted = lesson.sublessons?.every(
                   (_, subLessonIndex) =>
                     completedExercises.has(`${lessonIndex}-${subLessonIndex}`)
@@ -834,6 +1171,12 @@ function CourseContent() {
                   </div>
                 );
               })
+            ) : (
+              <div className="p-4 text-center text-gray-500">
+                No content available
+              </div>
+            )}
+              </>
             )}
           </div>
         </div>
@@ -873,19 +1216,84 @@ function CourseContent() {
   );
 
   function handlePrevious() {
-    // Check if using hierarchical structure
-    if (course.subjects && course.subjects.length > 0) {
-      // Hierarchical structure navigation
-      if (currentSubTopicIndex > 0) {
-        const newIndex = currentSubTopicIndex - 1;
+    if (!course) return;
+    // Check if using new hierarchical structure (Course → Chapter → Topic → Lesson)
+    if (course.chapters && course.chapters.length > 0) {
+      // New hierarchical structure navigation
+      if (currentLessonIndexInTopic > 0) {
+        const newIndex = currentLessonIndexInTopic - 1;
         handleContentSelect(
-          course.subjects[currentSubjectIndex].topics[currentTopicIndex].subTopics[newIndex],
-          currentSubjectIndex,
+          course.chapters[currentChapterIndex].topics[currentTopicIndex].lessons[newIndex],
+          currentChapterIndex,
           currentTopicIndex,
           newIndex
         );
       } else if (currentTopicIndex > 0) {
         const newTopicIndex = currentTopicIndex - 1;
+        const prevTopic = course.chapters[currentChapterIndex].topics[newTopicIndex];
+        const newLessonIndex = prevTopic.lessons.length - 1;
+        handleContentSelect(
+          prevTopic.lessons[newLessonIndex],
+          currentChapterIndex,
+          newTopicIndex,
+          newLessonIndex
+        );
+      } else if (currentChapterIndex > 0) {
+        const newChapterIndex = currentChapterIndex - 1;
+        const prevChapter = course.chapters[newChapterIndex];
+        const lastTopicIndex = prevChapter.topics.length - 1;
+        const lastLessonIndex = prevChapter.topics[lastTopicIndex].lessons.length - 1;
+        handleContentSelect(
+          prevChapter.topics[lastTopicIndex].lessons[lastLessonIndex],
+          newChapterIndex,
+          lastTopicIndex,
+          lastLessonIndex
+        );
+      }
+    } else if (course.topics && course.topics.length > 0) {
+      // Old hierarchical structure navigation (Course → Topic → Chapter → Lesson)
+      if (currentLessonIndexInChapter > 0) {
+        const newIndex = currentLessonIndexInChapter - 1;
+        handleContentSelect(
+          course.topics[currentTopicIndexOld].chapters[currentChapterIndexOld].lessons[newIndex],
+          currentTopicIndexOld,
+          currentChapterIndexOld,
+          newIndex
+        );
+      } else if (currentChapterIndexOld > 0) {
+        const newChapterIndex = currentChapterIndexOld - 1;
+        const prevChapter = course.topics[currentTopicIndexOld].chapters[newChapterIndex];
+        const newLessonIndex = prevChapter.lessons.length - 1;
+        handleContentSelect(
+          prevChapter.lessons[newLessonIndex],
+          currentTopicIndexOld,
+          newChapterIndex,
+          newLessonIndex
+        );
+      } else if (currentTopicIndexOld > 0) {
+        const newTopicIndex = currentTopicIndexOld - 1;
+        const prevTopic = course.topics[newTopicIndex];
+        const lastChapterIndex = prevTopic.chapters.length - 1;
+        const lastLessonIndex = prevTopic.chapters[lastChapterIndex].lessons.length - 1;
+        handleContentSelect(
+          prevTopic.chapters[lastChapterIndex].lessons[lastLessonIndex],
+          newTopicIndex,
+          lastChapterIndex,
+          lastLessonIndex
+        );
+      }
+    } else if (course.subjects && course.subjects.length > 0) {
+      // Old hierarchical structure navigation (Course → Subject → Topic → SubTopic)
+      if (currentSubTopicIndex > 0) {
+        const newIndex = currentSubTopicIndex - 1;
+        handleContentSelect(
+          course.subjects[currentSubjectIndex].topics[currentSubjectTopicIndex].subTopics[newIndex],
+          currentSubjectIndex,
+          currentSubjectTopicIndex,
+          newIndex
+        );
+      } else if (currentSubjectTopicIndex > 0) {
+        const newTopicIndex = currentSubjectTopicIndex - 1;
         const prevTopic = course.subjects[currentSubjectIndex].topics[newTopicIndex];
         const newSubTopicIndex = prevTopic.subTopics.length - 1;
         handleContentSelect(
@@ -907,7 +1315,7 @@ function CourseContent() {
         );
       }
     } else {
-      // Old structure navigation
+      // Old structure navigation (Course → Lesson → Sublesson)
       if (currentSubLessonIndex > 0) {
         const newIndex = currentSubLessonIndex - 1;
         handleContentSelect(
@@ -929,22 +1337,83 @@ function CourseContent() {
   }
 
   function handleNext() {
-    // Check if using hierarchical structure
-    if (course.subjects && course.subjects.length > 0) {
-      // Hierarchical structure navigation
+    if (!course) return;
+    // Check if using new hierarchical structure (Course → Chapter → Topic → Lesson)
+    if (course.chapters && course.chapters.length > 0) {
+      // New hierarchical structure navigation
+      const currentChapter = course.chapters[currentChapterIndex];
+      const currentTopic = currentChapter.topics[currentTopicIndex];
+      
+      if (currentLessonIndexInTopic < currentTopic.lessons.length - 1) {
+        const newIndex = currentLessonIndexInTopic + 1;
+        handleContentSelect(
+          currentTopic.lessons[newIndex],
+          currentChapterIndex,
+          currentTopicIndex,
+          newIndex
+        );
+      } else if (currentTopicIndex < currentChapter.topics.length - 1) {
+        const newTopicIndex = currentTopicIndex + 1;
+        handleContentSelect(
+          currentChapter.topics[newTopicIndex].lessons[0],
+          currentChapterIndex,
+          newTopicIndex,
+          0
+        );
+      } else if (currentChapterIndex < course.chapters.length - 1) {
+        const newChapterIndex = currentChapterIndex + 1;
+        handleContentSelect(
+          course.chapters[newChapterIndex].topics[0].lessons[0],
+          newChapterIndex,
+          0,
+          0
+        );
+      }
+    } else if (course.topics && course.topics.length > 0) {
+      // Old hierarchical structure navigation (Course → Topic → Chapter → Lesson)
+      const currentTopic = course.topics[currentTopicIndexOld];
+      const currentChapter = currentTopic.chapters[currentChapterIndexOld];
+      
+      if (currentLessonIndexInChapter < currentChapter.lessons.length - 1) {
+        const newIndex = currentLessonIndexInChapter + 1;
+        handleContentSelect(
+          currentChapter.lessons[newIndex],
+          currentTopicIndexOld,
+          currentChapterIndexOld,
+          newIndex
+        );
+      } else if (currentChapterIndexOld < currentTopic.chapters.length - 1) {
+        const newChapterIndex = currentChapterIndexOld + 1;
+        handleContentSelect(
+          currentTopic.chapters[newChapterIndex].lessons[0],
+          currentTopicIndexOld,
+          newChapterIndex,
+          0
+        );
+      } else if (currentTopicIndexOld < course.topics.length - 1) {
+        const newTopicIndex = currentTopicIndexOld + 1;
+        handleContentSelect(
+          course.topics[newTopicIndex].chapters[0].lessons[0],
+          newTopicIndex,
+          0,
+          0
+        );
+      }
+    } else if (course.subjects && course.subjects.length > 0) {
+      // Old hierarchical structure navigation (Course → Subject → Topic → SubTopic)
       const currentSubject = course.subjects[currentSubjectIndex];
-      const currentTopic = currentSubject.topics[currentTopicIndex];
+      const currentTopic = currentSubject.topics[currentSubjectTopicIndex];
       
       if (currentSubTopicIndex < currentTopic.subTopics.length - 1) {
         const newIndex = currentSubTopicIndex + 1;
         handleContentSelect(
           currentTopic.subTopics[newIndex],
           currentSubjectIndex,
-          currentTopicIndex,
+          currentSubjectTopicIndex,
           newIndex
         );
-      } else if (currentTopicIndex < currentSubject.topics.length - 1) {
-        const newTopicIndex = currentTopicIndex + 1;
+      } else if (currentSubjectTopicIndex < currentSubject.topics.length - 1) {
+        const newTopicIndex = currentSubjectTopicIndex + 1;
         handleContentSelect(
           currentSubject.topics[newTopicIndex].subTopics[0],
           currentSubjectIndex,
@@ -961,7 +1430,7 @@ function CourseContent() {
         );
       }
     } else {
-      // Old structure navigation
+      // Old structure navigation (Course → Lesson → Sublesson)
       const currentLesson = course.lessons[currentLessonIndex];
       if (currentSubLessonIndex < currentLesson.sublessons.length - 1) {
         const newIndex = currentSubLessonIndex + 1;
@@ -982,13 +1451,30 @@ function CourseContent() {
   }
 
   function isFirstContent() {
-    if (course.subjects && course.subjects.length > 0) {
+    if (!course) return false;
+    if (course.chapters && course.chapters.length > 0) {
+      // New hierarchical structure: Course → Chapter → Topic → Lesson
+      return (
+        currentChapterIndex === 0 &&
+        currentTopicIndex === 0 &&
+        currentLessonIndexInTopic === 0
+      );
+    } else if (course.topics && course.topics.length > 0) {
+      // Old hierarchical structure: Course → Topic → Chapter → Lesson
+      return (
+        currentTopicIndexOld === 0 &&
+        currentChapterIndexOld === 0 &&
+        currentLessonIndexInChapter === 0
+      );
+    } else if (course.subjects && course.subjects.length > 0) {
+      // Old hierarchical structure: Course → Subject → Topic → SubTopic
       return (
         currentSubjectIndex === 0 &&
-        currentTopicIndex === 0 &&
+        currentSubjectTopicIndex === 0 &&
         currentSubTopicIndex === 0
       );
     } else {
+      // Old structure: Course → Lesson → Sublesson
       return (
         currentLessonIndex === 0 &&
         currentSubLessonIndex === 0
@@ -997,15 +1483,36 @@ function CourseContent() {
   }
 
   function isLastContent() {
-    if (course.subjects && course.subjects.length > 0) {
+    if (!course) return false;
+    if (course.chapters && course.chapters.length > 0) {
+      // New hierarchical structure: Course → Chapter → Topic → Lesson
+      const lastChapter = course.chapters[course.chapters.length - 1];
+      const lastTopic = lastChapter.topics[lastChapter.topics.length - 1];
+      return (
+        currentChapterIndex === course.chapters.length - 1 &&
+        currentTopicIndex === lastChapter.topics.length - 1 &&
+        currentLessonIndexInTopic === lastTopic.lessons.length - 1
+      );
+    } else if (course.topics && course.topics.length > 0) {
+      // Old hierarchical structure: Course → Topic → Chapter → Lesson
+      const lastTopic = course.topics[course.topics.length - 1];
+      const lastChapter = lastTopic.chapters[lastTopic.chapters.length - 1];
+      return (
+        currentTopicIndexOld === course.topics.length - 1 &&
+        currentChapterIndexOld === lastTopic.chapters.length - 1 &&
+        currentLessonIndexInChapter === lastChapter.lessons.length - 1
+      );
+    } else if (course.subjects && course.subjects.length > 0) {
+      // Old hierarchical structure: Course → Subject → Topic → SubTopic
       const lastSubject = course.subjects[course.subjects.length - 1];
       const lastTopic = lastSubject.topics[lastSubject.topics.length - 1];
       return (
         currentSubjectIndex === course.subjects.length - 1 &&
-        currentTopicIndex === lastSubject.topics.length - 1 &&
+        currentSubjectTopicIndex === lastSubject.topics.length - 1 &&
         currentSubTopicIndex === lastTopic.subTopics.length - 1
       );
     } else {
+      // Old structure: Course → Lesson → Sublesson
       return (
         currentLessonIndex === course.lessons.length - 1 &&
         currentSubLessonIndex ===
