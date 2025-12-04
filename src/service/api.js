@@ -1,10 +1,10 @@
 import axios from "axios";
 // const baseUrl = "https://lawcoach.in/api";
-const baseUrl = "http://localhost:5001";
-export const baseUrl1 = "http://localhost:5001";
+// const baseUrl = "http://localhost:5001";
+// export const baseUrl1 = "http://localhost:5001";
 // export const baseUrl1 = "https://lawcoach.in/api";
-// const baseUrl = "https://lms-test-back.onrender.com";
-// export const baseUrl1 = "https://lms-test-back.onrender.com";
+const baseUrl = "https://lms-test-back.onrender.com";
+export const baseUrl1 = "https://lms-test-back.onrender.com";
 const Token = JSON.parse(localStorage.getItem("loginData"));
 
 axios.defaults.headers.common["Authorization"] = `Bearer ${Token?.token}`;
@@ -95,7 +95,7 @@ export const AuthGoogleLogin = async ({ code }) => {
 
 // Google Signup
 export const AuthGoogleSignup = async ({ code, username }) => {
-  try {
+   try {
     const res = await api.post("/api/auth/google", { code });
     localStorage.setItem("loginData", JSON.stringify(res.data));
     return res.data;
