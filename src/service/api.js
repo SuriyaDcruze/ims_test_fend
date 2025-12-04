@@ -3,8 +3,8 @@ import axios from "axios";
 // const baseUrl = "http://localhost:5001";
 // export const baseUrl1 = "http://localhost:5001";
 // export const baseUrl1 = "https://lawcoach.in/api";
-const baseUrl = "https://lms-test-back.onrender.com";
-export const baseUrl1 = "https://lms-test-back.onrender.com";
+const baseUrl = "https://ims-test-backend.onrender.com";
+export const baseUrl1 = "https://ims-test-backend.onrender.com";
 const Token = JSON.parse(localStorage.getItem("loginData"));
 
 axios.defaults.headers.common["Authorization"] = `Bearer ${Token?.token}`;
